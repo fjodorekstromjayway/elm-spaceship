@@ -28,6 +28,10 @@ type alias GameObject a =
     { a | position : Vector2, speed : Vector2 }
 
 
+type alias Enemy =
+    GameObject { health : Int }
+
+
 type alias Shot =
     GameObject { lifetime : Float }
 
@@ -39,14 +43,21 @@ type alias Ship =
 type alias Model =
     { player : Ship
     , shots : List Shot
+    , enemies : List Enemy
     , windowSize : ( Int, Int )
     }
+
+
+initialEnemy : Enemy
+initialEnemy =
+    { position = zero2, speed = zero2, health = 100 }
 
 
 initialShip : Model
 initialShip =
     { player = { position = zero2, speed = zero2, health = 100, targetPosition = zero2 }
     , shots = []
+    , enemies = [ initialEnemy ]
     , windowSize = ( 400, 400 )
     }
 
@@ -66,6 +77,9 @@ view model =
 
         drawShot' =
             drawShot windowSize'
+
+        drawEnemy' =
+            drawEnemy windowSize'
     in
         collage w
             h
@@ -75,6 +89,7 @@ view model =
                 , [ drawShip windowSize' model.player
                   , toForm (show model)
                   ]
+                , (List.map drawEnemy' model.enemies)
                 ]
             )
             |> toHtml
@@ -105,6 +120,17 @@ drawShip size ship =
             |> move ( ship.position.x - (size.x / 2), (size.y / 2) - ship.position.y )
 
 
+drawEnemy : Vector2 -> Enemy -> Form
+drawEnemy size enemy =
+    let
+        enemyColor =
+            green
+    in
+        ngon 4 50
+            |> filled enemyColor
+            |> move ( enemy.position.x, enemy.position.y )
+
+
 
 -- UPDATE
 
@@ -121,33 +147,43 @@ type Msg
 (+++) v1 v2 =
     { x = v1.x + v2.x, y = v1.y + v2.y }
 
+
 (:---) : Vector2 -> Vector2 -> Vector2
 (:---) v1 v2 =
     { x = v1.x - v2.x, y = v1.y - v2.y }
 
+
 (***) : Float -> Vector2 -> Vector2
 (***) scalar v =
-    { x = scalar * v.x, y = scalar * v.y}
- 
+    { x = scalar * v.x, y = scalar * v.y }
+
+
 gravity : Vector2
-gravity = {x=0, y=1}
+gravity =
+    { x = 0, y = 1 }
+
 
 animateWithGravity : GameObject a -> GameObject a
 animateWithGravity o =
     { o | position = o.position +++ o.speed, speed = o.speed +++ gravity }
 
+
 animatePlayer : Ship -> Ship
 animatePlayer o =
     let
-        s = 0.1 *** (o.targetPosition :--- o.position)
-        speed = { x=s.x, y=0 }
-    in 
+        s =
+            0.1 *** (o.targetPosition :--- o.position)
+
+        speed =
+            { x = s.x, y = 0 }
+    in
         { o | position = o.position +++ speed, speed = speed }
 
-outOfBounds : (Int, Int) -> GameObject a -> Bool
-outOfBounds (width, height) o =
+
+outOfBounds : ( Int, Int ) -> GameObject a -> Bool
+outOfBounds ( width, height ) o =
     o.position.y < toFloat height
-        
+
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -173,10 +209,15 @@ update msg model =
                 ( { model | player = { player | targetPosition = position } }, Cmd.none )
 
         Tick ->
-            ( { model | player = animatePlayer model.player,
-                        shots = model.shots 
-                                |> List.map animateWithGravity 
-                                |> List.filter (outOfBounds model.windowSize)}, Cmd.none )
+            ( { model
+                | player = animatePlayer model.player
+                , shots =
+                    model.shots
+                        |> List.map animateWithGravity
+                        |> List.filter (outOfBounds model.windowSize)
+              }
+            , Cmd.none
+            )
 
         WindowSizeChanged size ->
             let
